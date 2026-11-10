@@ -4,6 +4,7 @@ using Unity.Netcode;
 using Unity.Netcode.Components;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
 
 public class PlayerMovement : NetworkBehaviour
 {
@@ -24,7 +25,7 @@ public class PlayerMovement : NetworkBehaviour
     {
         characterController = GetComponent<CharacterController>();
 
-        // Se mantiene desactivado durante la inicialización.
+        // Se activa después de que el jugador se ubique en su spawn.
         if (characterController != null)
         {
             characterController.enabled = false;
@@ -42,7 +43,7 @@ public class PlayerMovement : NetworkBehaviour
 
     private void Update()
     {
-        // Solo el dueño lee controles y mueve al jugador.
+        // Solo el dueño lee controles y mueve a este jugador.
         if (!IsOwner) return;
 
         if (skipAction.action.WasPressedThisFrame())
@@ -50,14 +51,18 @@ public class PlayerMovement : NetworkBehaviour
             RequestSkipRoundServerRpc();
         }
 
-        Vector2 input = moveAction.action.ReadValue<Vector2>();
-        Vector3 move = transform.right * input.x + transform.forward * input.y;
-        Vector3 movement = move * speed;
-
         if (characterController == null || !characterController.enabled)
         {
             return;
         }
+
+        Vector2 input = moveAction.action.ReadValue<Vector2>();
+
+        Vector3 move =
+            transform.right * input.x +
+            transform.forward * input.y;
+
+        Vector3 movement = move * speed;
 
         if (characterController.isGrounded)
         {
@@ -82,9 +87,10 @@ public class PlayerMovement : NetworkBehaviour
     private void RequestSkipRoundServerRpc()
     {
         Debug.Log("[SERVER] Salteando ronda hacia GameOver...");
+
         NetworkManager.Singleton.SceneManager.LoadScene(
             "GameOver",
-            UnityEngine.SceneManagement.LoadSceneMode.Single
+            LoadSceneMode.Single
         );
     }
 
@@ -92,14 +98,13 @@ public class PlayerMovement : NetworkBehaviour
     {
         base.OnNetworkSpawn();
 
-        // La copia del jugador cliente en el servidor también necesita
-        // un collider activo para que el servidor detecte la DeathZone.
+        // La copia del jugador cliente en el servidor necesita
+        // el CharacterController activo para detectar la DeathZone.
         if (IsServer && !IsOwner && characterController != null)
         {
             characterController.enabled = true;
         }
 
-        // Solo el dueño coloca su jugador en el spawn correspondiente.
         if (IsOwner)
         {
             StartCoroutine(SelfTeleportSafelyRoutine());
@@ -108,25 +113,26 @@ public class PlayerMovement : NetworkBehaviour
 
     private IEnumerator SelfTeleportSafelyRoutine()
     {
-        // Esperamos a que la escena y la red terminen de inicializarse.
+        // Espera a que la escena termine de inicializarse.
         yield return null;
 
         Vector3 destino = new Vector3(0f, 2f, 0f);
+        Quaternion rotacion = Quaternion.identity;
 
-        string nombreSpawn = OwnerClientId == 0
-            ? "SpawnPoint_Host"
-            : "SpawnPoint_Client";
-
-        GameObject puntoEncontrado = GameObject.Find(nombreSpawn);
-
-        if (puntoEncontrado != null)
+        if (NetworkSpawnManager.Instance != null)
         {
-            destino = puntoEncontrado.transform.position;
+            destino = NetworkSpawnManager.Instance.GetSpawnPosition(
+                OwnerClientId
+            );
+
+            rotacion = NetworkSpawnManager.Instance.GetSpawnRotation(
+                OwnerClientId
+            );
         }
         else
         {
-            Debug.LogWarning(
-                $"No se encontró '{nombreSpawn}'. Se usará la posición de respaldo."
+            Debug.LogError(
+                $"[SPAWN SEGURO] No se encontró NetworkSpawnManager para el jugador {OwnerClientId}. Se usará la posición de respaldo."
             );
         }
 
@@ -143,7 +149,7 @@ public class PlayerMovement : NetworkBehaviour
             characterController.enabled = false;
         }
 
-        transform.SetPositionAndRotation(destino, Quaternion.identity);
+        transform.SetPositionAndRotation(destino, rotacion);
         velocity = Vector3.zero;
 
         yield return null;
@@ -166,16 +172,21 @@ public class PlayerMovement : NetworkBehaviour
     [ClientRpc]
     public void TriggerSafeTeleportClientRpc(
         Vector3 destino,
+        Quaternion rotacion,
         ClientRpcParams clientRpcParams = default
     )
     {
-        // El RPC llega al cliente objetivo; solo el dueño mueve su jugador.
         if (!IsOwner) return;
 
-        StartCoroutine(EjecutarTeletransporteDesdeMuerte(destino));
+        StartCoroutine(
+            EjecutarTeletransporteDesdeMuerte(destino, rotacion)
+        );
     }
 
-    private IEnumerator EjecutarTeletransporteDesdeMuerte(Vector3 destino)
+    private IEnumerator EjecutarTeletransporteDesdeMuerte(
+        Vector3 destino,
+        Quaternion rotacion
+    )
     {
         ClientNetworkTransform clientTransform =
             GetComponent<ClientNetworkTransform>();
@@ -190,7 +201,7 @@ public class PlayerMovement : NetworkBehaviour
             characterController.enabled = false;
         }
 
-        transform.SetPositionAndRotation(destino, Quaternion.identity);
+        transform.SetPositionAndRotation(destino, rotacion);
         velocity = Vector3.zero;
 
         yield return null;

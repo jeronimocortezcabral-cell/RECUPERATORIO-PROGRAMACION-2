@@ -7,15 +7,20 @@ public class GameManager : NetworkBehaviour
 {
     [Header("Configuración del Tiempo")]
     public float maxTime = 60f;
-    public NetworkVariable<float> timeRemaining = new NetworkVariable<float>(60f);
+    public NetworkVariable<float> timeRemaining =
+        new NetworkVariable<float>(60f);
+
     private bool isGameOver = false;
 
     [Header("Puntajes Competitivos Sincronizados")]
-    public NetworkVariable<int> hostScore = new NetworkVariable<int>(0);
-    public NetworkVariable<int> clientScore = new NetworkVariable<int>(0);
+    public NetworkVariable<int> hostScore =
+        new NetworkVariable<int>(0);
+
+    public NetworkVariable<int> clientScore =
+        new NetworkVariable<int>(0);
 
     [Header("Spawn de Jugadores")]
-    public Transform[] playerSpawnPoints; // Arrastra aquí tus puntos de spawn desde la escena del juego
+    public Transform[] playerSpawnPoints;
 
     [Header("Referencias de la UI")]
     public TextMeshProUGUI timerText;
@@ -29,8 +34,14 @@ public class GameManager : NetworkBehaviour
 
     private void Awake()
     {
-        if (Instance == null) Instance = this;
-        else Destroy(gameObject);
+        if (Instance == null)
+        {
+            Instance = this;
+        }
+        else if (Instance != this)
+        {
+            Destroy(gameObject);
+        }
     }
 
     private void Start()
@@ -40,8 +51,11 @@ public class GameManager : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
+        base.OnNetworkSpawn();
+
         if (IsServer)
         {
+            isGameOver = false;
             timeRemaining.Value = maxTime;
             hostScore.Value = 0;
             clientScore.Value = 0;
@@ -52,16 +66,17 @@ public class GameManager : NetworkBehaviour
     {
         if (IsServer && !isGameOver)
         {
-            if (timeRemaining.Value > 0)
+            if (timeRemaining.Value > 0f)
             {
                 timeRemaining.Value -= Time.deltaTime;
             }
             else
             {
-                timeRemaining.Value = 0;
+                timeRemaining.Value = 0f;
                 isGameOver = true;
 
-                string winnerMessage = "";
+                string winnerMessage;
+
                 if (hostScore.Value > clientScore.Value)
                 {
                     winnerMessage = "¡GANÓ EL JUGADOR 1 (HOST)!";
@@ -75,7 +90,23 @@ public class GameManager : NetworkBehaviour
                     winnerMessage = "¡HUBO UN EMPATE!";
                 }
 
-                ExecuteGameOverClientRpc(winnerMessage, hostScore.Value, clientScore.Value);
+                // El servidor guarda los resultados para su propia instancia.
+                WinnerText = winnerMessage;
+                HostFinalScore = hostScore.Value;
+                ClientFinalScore = clientScore.Value;
+
+                // Envía los resultados a las demás instancias.
+                UpdateGameOverClientRpc(
+                    winnerMessage,
+                    hostScore.Value,
+                    clientScore.Value
+                );
+
+                // La carga de escena ocurre directamente en el servidor.
+                NetworkManager.Singleton.SceneManager.LoadScene(
+                    "GameOver",
+                    LoadSceneMode.Single
+                );
             }
         }
 
@@ -83,18 +114,26 @@ public class GameManager : NetworkBehaviour
         UpdatePointsUI();
     }
 
-    void UpdateTimerUI()
+    private void UpdateTimerUI()
     {
         if (timerText == null) return;
-        int minutes = Mathf.FloorToInt(timeRemaining.Value / 60);
-        int seconds = Mathf.FloorToInt(timeRemaining.Value % 60);
-        timerText.text = string.Format("Tiempo: {0:00}:{1:00}", minutes, seconds);
+
+        int minutes = Mathf.FloorToInt(timeRemaining.Value / 60f);
+        int seconds = Mathf.FloorToInt(timeRemaining.Value % 60f);
+
+        timerText.text = string.Format(
+            "Tiempo: {0:00}:{1:00}",
+            minutes,
+            seconds
+        );
     }
 
-    void UpdatePointsUI()
+    private void UpdatePointsUI()
     {
         if (pointsText == null) return;
-        pointsText.text = $"J1 (Host): {hostScore.Value} | J2 (Cliente): {clientScore.Value}";
+
+        pointsText.text =
+            $"J1 (Host): {hostScore.Value} | J2 (Cliente): {clientScore.Value}";
     }
 
     public void AddScoreToPlayer(ulong clientId, int points)
@@ -112,15 +151,24 @@ public class GameManager : NetworkBehaviour
     }
 
     [ClientRpc]
-    private void ExecuteGameOverClientRpc(string winner, int hostPts, int clientPts)
+    private void UpdateGameOverClientRpc(
+        string winner,
+        int hostPts,
+        int clientPts
+    )
     {
         WinnerText = winner;
         HostFinalScore = hostPts;
         ClientFinalScore = clientPts;
+    }
 
-        if (IsServer)
+    public override void OnNetworkDespawn()
+    {
+        if (Instance == this)
         {
-            NetworkManager.Singleton.SceneManager.LoadScene("GameOver", LoadSceneMode.Single);
+            Instance = null;
         }
+
+        base.OnNetworkDespawn();
     }
 }

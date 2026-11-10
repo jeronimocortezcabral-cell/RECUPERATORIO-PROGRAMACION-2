@@ -5,47 +5,48 @@ public class DeathZone : NetworkBehaviour
 {
     private void OnTriggerEnter(Collider other)
     {
-        // La muerte y el respawn se procesan solo en el servidor.
+        // El servidor procesa la caída y solicita el respawn.
         if (!IsServer) return;
 
-        // También busca en los padres por si el collider está en un objeto hijo.
+        // Busca PlayerMovement también en los padres por si el collider está en un hijo.
         PlayerMovement player = other.GetComponentInParent<PlayerMovement>();
 
         if (player == null) return;
 
-        ulong clientId = player.OwnerClientId;
+        Vector3 destino = new Vector3(0f, 2f, 0f);
+        Quaternion rotacion = Quaternion.identity;
 
-        string nombreSpawn = clientId == 0
-            ? "SpawnPoint_Host"
-            : "SpawnPoint_Client";
-
-        GameObject puntoEncontrado = GameObject.Find(nombreSpawn);
-
-        if (puntoEncontrado == null)
+        if (NetworkSpawnManager.Instance != null)
         {
-            Debug.LogWarning(
-                $"[DEATHZONE] No se encontró '{nombreSpawn}'. Se usará la posición de respaldo."
+            destino = NetworkSpawnManager.Instance.GetSpawnPosition(
+                player.OwnerClientId
+            );
+
+            rotacion = NetworkSpawnManager.Instance.GetSpawnRotation(
+                player.OwnerClientId
+            );
+        }
+        else
+        {
+            Debug.LogError(
+                "[DEATHZONE] No se encontró NetworkSpawnManager. Se usará la posición de respaldo."
             );
         }
 
-        Vector3 destino = puntoEncontrado != null
-            ? puntoEncontrado.transform.position
-            : new Vector3(0f, 2f, 0f);
-
         player.TriggerSafeTeleportClientRpc(
             destino,
+            rotacion,
             new ClientRpcParams
             {
                 Send = new ClientRpcSendParams
                 {
-                    TargetClientIds = new[] { clientId }
+                    TargetClientIds = new[] { player.OwnerClientId }
                 }
             }
         );
 
         Debug.Log(
-            $"[DEATHZONE] El servidor detectó la caída del jugador {clientId}. " +
-            $"Enviando respawn a '{nombreSpawn}' en {destino}."
+            $"[DEATHZONE] Jugador {player.OwnerClientId}: respawn solicitado en {destino}."
         );
     }
 }

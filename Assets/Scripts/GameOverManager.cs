@@ -12,21 +12,21 @@ public class GameOverManager : MonoBehaviour
     public Button menuButton;
 
     [Header("Configuración")]
-    [SerializeField] private string gameSceneName = "GameScene"; // Nombre exacto de tu escena de juego
+    [SerializeField] private string gameSceneName = "Juego";
 
     private void Start()
     {
         if (finalScoreText != null)
         {
-            finalScoreText.text = $"{GameManager.WinnerText}\n\n" +
-                                  $"Jugador 1 (Host): {GameManager.HostFinalScore} pts\n" +
-                                  $"Jugador 2 (Cliente): {GameManager.ClientFinalScore} pts";
+            finalScoreText.text =
+                $"{GameManager.WinnerText}\n\n" +
+                $"Jugador 1 (Host): {GameManager.HostFinalScore} pts\n" +
+                $"Jugador 2 (Cliente): {GameManager.ClientFinalScore} pts";
         }
 
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
 
-        // Auto-enlace de seguridad para los botones
         if (playAgainButton != null)
         {
             playAgainButton.onClick.RemoveAllListeners();
@@ -42,25 +42,29 @@ public class GameOverManager : MonoBehaviour
 
     public void OnPlayAgainClicked()
     {
-        Debug.Log("🔄 [GAME OVER] Botón de Rejugar pulsado.");
+        Debug.Log($"[GAME OVER] Rejugar. Escena configurada: '{gameSceneName}'.");
 
-        // Verificamos si este jugador es el Host (Servidor)
-        if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer)
+        if (NetworkManager.Singleton == null)
         {
-            Debug.Log($"🔄 [SERVIDOR] Reiniciando partida. Cargando escena: {gameSceneName}");
-            NetworkManager.Singleton.SceneManager.LoadScene(gameSceneName, LoadSceneMode.Single);
+            Debug.LogError("[GAME OVER] No se encontró NetworkManager.");
+            return;
         }
-        else
+
+        if (!NetworkManager.Singleton.IsServer)
         {
-            Debug.Log("⚠️ Solo el Host puede reiniciar la partida. (O puedes programar que mande al menú)");
-            // Opcional: si es cliente, puedes mandarlo al menú o mostrarle un aviso
-            // VolverAlMenu();
+            Debug.LogWarning("[GAME OVER] Solo el host puede reiniciar la partida.");
+            return;
         }
+
+        NetworkManager.Singleton.SceneManager.LoadScene(
+            gameSceneName,
+            LoadSceneMode.Single
+        );
     }
 
     public void VolverAlMenu()
     {
-        Debug.Log("🔌 [GAME OVER] Apagando Netcode y regresando al menú principal...");
+        Debug.Log("[GAME OVER] Apagando Netcode y regresando al menú.");
 
         if (NetworkManager.Singleton != null)
         {
