@@ -4,14 +4,13 @@ using Unity.Netcode;
 using Unity.Netcode.Components;
 using UnityEngine;
 using UnityEngine.InputSystem;
-using UnityEngine.SceneManagement;
 
 public class PlayerMovement : NetworkBehaviour
 {
     [Header("Controles (Input System)")]
     [SerializeField] private InputActionProperty moveAction;
     [SerializeField] private InputActionProperty jumpAction;
-    [SerializeField] private InputActionProperty skipAction; // Atajo para presionar la X y saltear ronda
+    [SerializeField] private InputActionProperty skipAction;
 
     [Header("Configuración de Movimiento")]
     [SerializeField] private float speed = 5f;
@@ -25,15 +24,14 @@ public class PlayerMovement : NetworkBehaviour
     {
         characterController = GetComponent<CharacterController>();
 
-        // Blindaje: Nos aseguramos de que nazca apagado para evitar que las físicas 
-        // lo detecten en (0,0,0) al recargar la escena o presionar "Rejugar".
+        // Se mantiene desactivado durante la inicialización.
         if (characterController != null)
         {
             characterController.enabled = false;
         }
     }
 
-    void Start()
+    private void Start()
     {
         if (!IsOwner) return;
 
@@ -42,58 +40,66 @@ public class PlayerMovement : NetworkBehaviour
         skipAction.action.Enable();
     }
 
-    void Update()
+    private void Update()
     {
+        // Solo el dueño lee controles y mueve al jugador.
         if (!IsOwner) return;
 
-        // 1. Detectar si se presiona la X para ir al GameOver de inmediato
         if (skipAction.action.WasPressedThisFrame())
         {
             RequestSkipRoundServerRpc();
         }
 
-        // 2. Movimiento horizontal
         Vector2 input = moveAction.action.ReadValue<Vector2>();
         Vector3 move = transform.right * input.x + transform.forward * input.y;
         Vector3 movement = move * speed;
 
-        if (characterController != null && characterController.enabled)
+        if (characterController == null || !characterController.enabled)
         {
-            // 3. Comprobar suelo y salto
-            if (characterController.isGrounded)
-            {
-                if (velocity.y < 0)
-                {
-                    velocity.y = -2f;
-                }
+            return;
+        }
 
-                if (jumpAction.action.WasPressedThisFrame())
-                {
-                    velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
-                }
+        if (characterController.isGrounded)
+        {
+            if (velocity.y < 0f)
+            {
+                velocity.y = -2f;
             }
 
-            // 4. Gravedad
-            velocity.y += gravity * Time.deltaTime;
-            movement.y = velocity.y;
-
-            // 5. Mover controlador
-            characterController.Move(movement * Time.deltaTime);
+            if (jumpAction.action.WasPressedThisFrame())
+            {
+                velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
+            }
         }
+
+        velocity.y += gravity * Time.deltaTime;
+        movement.y = velocity.y;
+
+        characterController.Move(movement * Time.deltaTime);
     }
 
     [ServerRpc]
     private void RequestSkipRoundServerRpc()
     {
-        Debug.Log("⚡ [SERVER] Salteando ronda con la tecla X hacia GameOver...");
-        NetworkManager.Singleton.SceneManager.LoadScene("GameOver", LoadSceneMode.Single);
+        Debug.Log("[SERVER] Salteando ronda hacia GameOver...");
+        NetworkManager.Singleton.SceneManager.LoadScene(
+            "GameOver",
+            UnityEngine.SceneManagement.LoadSceneMode.Single
+        );
     }
 
     public override void OnNetworkSpawn()
     {
         base.OnNetworkSpawn();
 
-        // Solo el dueño del objeto ejecuta su propia rutina de auto-posicionamiento seguro
+        // La copia del jugador cliente en el servidor también necesita
+        // un collider activo para que el servidor detecte la DeathZone.
+        if (IsServer && !IsOwner && characterController != null)
+        {
+            characterController.enabled = true;
+        }
+
+        // Solo el dueño coloca su jugador en el spawn correspondiente.
         if (IsOwner)
         {
             StartCoroutine(SelfTeleportSafelyRoutine());
@@ -102,12 +108,15 @@ public class PlayerMovement : NetworkBehaviour
 
     private IEnumerator SelfTeleportSafelyRoutine()
     {
-        yield return null; // Esperamos un frame para que la red y la escena se estabilicen
+        // Esperamos a que la escena y la red terminen de inicializarse.
+        yield return null;
 
-        Vector3 destino = new Vector3(0f, 2f, 0f); // Posición por defecto de respaldo
+        Vector3 destino = new Vector3(0f, 2f, 0f);
 
-        // Buscamos el punto de spawn automáticamente por nombre en la escena actual
-        string nombreSpawn = (OwnerClientId == 0) ? "SpawnPoint_Host" : "SpawnPoint_Client";
+        string nombreSpawn = OwnerClientId == 0
+            ? "SpawnPoint_Host"
+            : "SpawnPoint_Client";
+
         GameObject puntoEncontrado = GameObject.Find(nombreSpawn);
 
         if (puntoEncontrado != null)
@@ -116,60 +125,89 @@ public class PlayerMovement : NetworkBehaviour
         }
         else
         {
-            Debug.LogWarning($"⚠️ No se encontró el objeto '{nombreSpawn}' en la escena. Usando posición por defecto.");
+            Debug.LogWarning(
+                $"No se encontró '{nombreSpawn}'. Se usará la posición de respaldo."
+            );
         }
 
-        ClientNetworkTransform clientTransform = GetComponent<ClientNetworkTransform>();
+        ClientNetworkTransform clientTransform =
+            GetComponent<ClientNetworkTransform>();
 
-        // 1. Apagamos los componentes que interfieren con las físicas iniciales
-        if (clientTransform != null) clientTransform.enabled = false;
-        if (characterController != null) characterController.enabled = false;
+        if (clientTransform != null)
+        {
+            clientTransform.enabled = false;
+        }
 
-        // 2. Colocamos al jugador en el punto exacto y reseteamos la inercia de caída
-        transform.position = destino;
-        transform.rotation = Quaternion.identity;
-        velocity = Vector3.zero; // Vital para que no arrastre velocidad hacia el abismo
+        if (characterController != null)
+        {
+            characterController.enabled = false;
+        }
 
-        // 3. Esperamos un frame para que Unity procese el cambio en el mundo
+        transform.SetPositionAndRotation(destino, Quaternion.identity);
+        velocity = Vector3.zero;
+
         yield return null;
 
-        // 4. Reactivamos todo y encendemos el CharacterController con seguridad
-        if (characterController != null) characterController.enabled = true;
-        if (clientTransform != null) clientTransform.enabled = true;
+        if (characterController != null)
+        {
+            characterController.enabled = true;
+        }
 
-        Debug.Log($"[SPAWN SEGURO] Jugador {OwnerClientId} colocado en {destino} con CharacterController activo.");
+        if (clientTransform != null)
+        {
+            clientTransform.enabled = true;
+        }
+
+        Debug.Log(
+            $"[SPAWN SEGURO] Jugador {OwnerClientId} colocado en {destino}."
+        );
     }
 
     [ClientRpc]
-    public void TriggerSafeTeleportClientRpc(Vector3 destino, ClientRpcParams clientRpcParams = default)
+    public void TriggerSafeTeleportClientRpc(
+        Vector3 destino,
+        ClientRpcParams clientRpcParams = default
+    )
     {
-        if (IsOwner)
-        {
-            StartCoroutine(EjecutarTeletransporteDesdeMuerte(destino));
-        }
+        // El RPC llega al cliente objetivo; solo el dueño mueve su jugador.
+        if (!IsOwner) return;
+
+        StartCoroutine(EjecutarTeletransporteDesdeMuerte(destino));
     }
 
-    private System.Collections.IEnumerator EjecutarTeletransporteDesdeMuerte(Vector3 destino)
+    private IEnumerator EjecutarTeletransporteDesdeMuerte(Vector3 destino)
     {
-        ClientNetworkTransform clientTransform = GetComponent<ClientNetworkTransform>();
+        ClientNetworkTransform clientTransform =
+            GetComponent<ClientNetworkTransform>();
 
-        // 1. Apagamos componentes que interfieren
-        if (clientTransform != null) clientTransform.enabled = false;
-        if (characterController != null) characterController.enabled = false;
+        if (clientTransform != null)
+        {
+            clientTransform.enabled = false;
+        }
 
-        // 2. Teletransportamos y matamos la inercia de caída
-        transform.position = destino;
-        transform.rotation = Quaternion.identity;
+        if (characterController != null)
+        {
+            characterController.enabled = false;
+        }
+
+        transform.SetPositionAndRotation(destino, Quaternion.identity);
         velocity = Vector3.zero;
 
-        // 3. Esperamos un frame
         yield return null;
 
-        // 4. Volvemos a encender todo con seguridad
-        if (characterController != null) characterController.enabled = true;
-        if (clientTransform != null) clientTransform.enabled = true;
+        if (characterController != null)
+        {
+            characterController.enabled = true;
+        }
 
-        Debug.Log("✅ [RESPAWN POR DEATHZONE] Jugador recolocado con éxito en tierra firme.");
+        if (clientTransform != null)
+        {
+            clientTransform.enabled = true;
+        }
+
+        Debug.Log(
+            $"[RESPAWN] Jugador {OwnerClientId} recolocado en {destino}."
+        );
     }
 
     public override void OnNetworkDespawn()
@@ -180,5 +218,7 @@ public class PlayerMovement : NetworkBehaviour
             jumpAction.action.Disable();
             skipAction.action.Disable();
         }
+
+        base.OnNetworkDespawn();
     }
 }

@@ -5,26 +5,47 @@ public class DeathZone : NetworkBehaviour
 {
     private void OnTriggerEnter(Collider other)
     {
-        // Solo el servidor procesa la colisión para evitar llamadas duplicadas
+        // La muerte y el respawn se procesan solo en el servidor.
         if (!IsServer) return;
 
-        PlayerMovement player = other.GetComponent<PlayerMovement>();
-        if (player != null)
+        // También busca en los padres por si el collider está en un objeto hijo.
+        PlayerMovement player = other.GetComponentInParent<PlayerMovement>();
+
+        if (player == null) return;
+
+        ulong clientId = player.OwnerClientId;
+
+        string nombreSpawn = clientId == 0
+            ? "SpawnPoint_Host"
+            : "SpawnPoint_Client";
+
+        GameObject puntoEncontrado = GameObject.Find(nombreSpawn);
+
+        if (puntoEncontrado == null)
         {
-            ulong clientId = player.OwnerClientId;
-
-            // Buscamos su punto de spawn correspondiente
-            string nombreSpawn = (clientId == 0) ? "SpawnPoint_Host" : "SpawnPoint_Client";
-            GameObject puntoEncontrado = GameObject.Find(nombreSpawn);
-            Vector3 destino = puntoEncontrado != null ? puntoEncontrado.transform.position : new Vector3(0f, 2f, 0f);
-
-            // Ordenamos al cliente específico que ejecute el teletransporte seguro
-            player.TriggerSafeTeleportClientRpc(destino, new ClientRpcParams
-            {
-                Send = new ClientRpcSendParams { TargetClientIds = new[] { clientId } }
-            });
-
-            Debug.Log($"🛡️ [DEATHZONE] Jugador {clientId} cayó al vacío. Rescatándolo hacia {nombreSpawn}...");
+            Debug.LogWarning(
+                $"[DEATHZONE] No se encontró '{nombreSpawn}'. Se usará la posición de respaldo."
+            );
         }
+
+        Vector3 destino = puntoEncontrado != null
+            ? puntoEncontrado.transform.position
+            : new Vector3(0f, 2f, 0f);
+
+        player.TriggerSafeTeleportClientRpc(
+            destino,
+            new ClientRpcParams
+            {
+                Send = new ClientRpcSendParams
+                {
+                    TargetClientIds = new[] { clientId }
+                }
+            }
+        );
+
+        Debug.Log(
+            $"[DEATHZONE] El servidor detectó la caída del jugador {clientId}. " +
+            $"Enviando respawn a '{nombreSpawn}' en {destino}."
+        );
     }
 }
