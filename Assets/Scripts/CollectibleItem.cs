@@ -1,5 +1,5 @@
-using UnityEngine;
 using Unity.Netcode;
+using UnityEngine;
 
 public class CollectibleItem : NetworkBehaviour
 {
@@ -9,6 +9,8 @@ public class CollectibleItem : NetworkBehaviour
     [SerializeField] private ItemType itemType;
 
     [HideInInspector] public int itemValue;
+
+    private bool _isCollected = false; // Para evitar que se recolecte dos veces por error
 
     public override void OnNetworkSpawn()
     {
@@ -31,24 +33,49 @@ public class CollectibleItem : NetworkBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
-        if (!IsServer) return;
-
+        // Verificamos si chocó contra un Jugador
         if (other.CompareTag("Player"))
         {
             NetworkObject playerNetObj = other.GetComponent<NetworkObject>();
 
             if (playerNetObj != null)
             {
-                ulong playerId = playerNetObj.OwnerClientId;
-
-                if (GameManager.Instance != null)
+                // CASO A: Lo toca el Host o Servidor directamente
+                if (IsServer)
                 {
-                    GameManager.Instance.AddScoreToPlayer(playerId, itemValue);
+                    ProcessCollection(playerNetObj.OwnerClientId);
                 }
-
-                GetComponent<NetworkObject>().Despawn();
-                Destroy(gameObject);
+                // CASO B: Lo toca un Cliente (verificamos que sea NUESTRO propio jugador local)
+                else if (IsClient && playerNetObj.IsOwner)
+                {
+                    RequestPickupServerRpc(playerNetObj.OwnerClientId);
+                }
             }
+        }
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    private void RequestPickupServerRpc(ulong clientId)
+    {
+        // El servidor recibe la petición del cliente y procesa la recogida de forma segura
+        ProcessCollection(clientId);
+    }
+
+    private void ProcessCollection(ulong clientId)
+    {
+        // Asegurarnos de que solo el servidor ejecute la lógica de puntaje y destrucción
+        if (!IsServer || _isCollected) return;
+        _isCollected = true;
+
+        if (GameManager.Instance != null)
+        {
+            GameManager.Instance.AddScoreToPlayer(clientId, itemValue);
+        }
+
+        // Despawnea el objeto en red y lo destruye para todos
+        if (NetworkObject != null && NetworkObject.IsSpawned)
+        {
+            NetworkObject.Despawn(true);
         }
     }
 }
