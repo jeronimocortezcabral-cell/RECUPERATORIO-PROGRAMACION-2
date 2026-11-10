@@ -302,7 +302,7 @@ MonoBehaviour:
   m_Pos:
     serializedVersion: 2
     x: 0
-    y: 43
+    y: 0
     width: 1920
     height: 36
   m_SerializedDataModeController:
@@ -620,7 +620,7 @@ MonoBehaviour:
   m_Pos:
     serializedVersion: 2
     x: 0
-    y: 717
+    y: 662
     width: 1521
     height: 277
   m_SerializedDataModeController:
@@ -671,13 +671,12 @@ MonoBehaviour:
       m_Data: 60316
     m_ExpandedIDs:
     - m_Data: 0
-    - m_Data: 60214
-    - m_Data: 60216
-    - m_Data: 60218
-    - m_Data: 60220
-    - m_Data: 60222
-    - m_Data: 60224
-    - m_Data: 1000000000
+    - m_Data: 60264
+    - m_Data: 60266
+    - m_Data: 60268
+    - m_Data: 60270
+    - m_Data: 60272
+    - m_Data: 60274
     m_RenameOverlay:
       m_UserAcceptedRename: 0
       m_Name: 
@@ -710,12 +709,12 @@ MonoBehaviour:
       m_Data: 0
     m_ExpandedIDs:
     - m_Data: 0
-    - m_Data: 60214
-    - m_Data: 60216
-    - m_Data: 60218
-    - m_Data: 60220
-    - m_Data: 60222
-    - m_Data: 60224
+    - m_Data: 60264
+    - m_Data: 60266
+    - m_Data: 60268
+    - m_Data: 60270
+    - m_Data: 60272
+    - m_Data: 60274
     m_RenameOverlay:
       m_UserAcceptedRename: 0
       m_Name: 
@@ -798,8 +797,8 @@ MonoBehaviour:
     m_TextWithWhitespace: "Inspector\u200B"
   m_Pos:
     serializedVersion: 2
-    x: 1522
-    y: 79
+    x: 1523
+    y: 24
     width: 397
     height: 915
   m_SerializedDataModeController:
@@ -850,7 +849,7 @@ MonoBehaviour:
   m_Pos:
     serializedVersion: 2
     x: 0
-    y: 79
+    y: 24
     width: 283
     height: 612
   m_SerializedDataModeController:
@@ -869,8 +868,7 @@ MonoBehaviour:
   m_SceneHierarchy:
     m_TreeViewState:
       scrollPos: {x: 0, y: 0}
-      m_SelectedIDs:
-      - m_Data: 61210
+      m_SelectedIDs: []
       m_LastClickedID:
         m_Data: 0
       m_ExpandedIDs:
@@ -935,8 +933,8 @@ MonoBehaviour:
     m_TextWithWhitespace: "Scene\u200B"
   m_Pos:
     serializedVersion: 2
-    x: 284
-    y: 79
+    x: 285
+    y: 24
     width: 1236
     height: 612
   m_SerializedDataModeController:
@@ -1495,7 +1493,7 @@ MonoBehaviour:
   m_Rotation:
     m_Target: {x: -0.0007125902, y: -0.9801032, z: -0.0035301165, w: 0.19846953}
     speed: 2
-    m_Value: {x: -0.0007125882, y: -0.9801005, z: -0.0035301067, w: 0.19846898}
+    m_Value: {x: 0.00071258645, y: 0.9801005, z: 0.003530105, w: -0.19846898}
   m_Size:
     m_Target: 21.219097
     speed: 2
