@@ -96,14 +96,11 @@ public class PlayerMovement : NetworkBehaviour
     {
         base.OnNetworkSpawn();
 
-        // La copia del jugador cliente en el servidor debe conservar
-        // su collider activo para detectar la DeathZone.
         if (IsServer && !IsOwner)
         {
             EnableServerCollision();
         }
 
-        // Posicionamiento inicial del dueño cuando aparece por primera vez.
         if (IsOwner)
         {
             StartCoroutine(InitialSpawnRoutine());
@@ -122,7 +119,6 @@ public class PlayerMovement : NetworkBehaviour
 
     private IEnumerator InitialSpawnRoutine()
     {
-        // Espera brevemente a que el NetworkSpawnManager esté disponible.
         int framesWaited = 0;
 
         while (NetworkSpawnManager.Instance == null && framesWaited < 120)

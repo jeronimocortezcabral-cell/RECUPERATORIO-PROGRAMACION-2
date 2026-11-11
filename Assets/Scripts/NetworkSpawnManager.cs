@@ -74,7 +74,6 @@ public class NetworkSpawnManager : NetworkBehaviour
 
     private IEnumerator RespawnPlayersAfterSceneLoad()
     {
-        // Espera un frame para que los objetos de escena terminen de inicializarse.
         yield return null;
 
         if (NetworkManager.Singleton == null)
@@ -111,11 +110,8 @@ public class NetworkSpawnManager : NetworkBehaviour
             Vector3 destino = GetSpawnPosition(client.ClientId);
             Quaternion rotacion = GetSpawnRotation(client.ClientId);
 
-            // El collider de la copia del servidor debe estar activo
-            // para detectar la DeathZone.
             player.EnableServerCollision();
 
-            // Solo el dueño del jugador ejecutará el teletransporte local.
             player.RespawnOwnerAtClientRpc(
                 destino,
                 rotacion,
