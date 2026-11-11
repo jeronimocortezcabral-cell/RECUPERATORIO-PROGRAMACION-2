@@ -96,92 +96,78 @@ public class PlayerMovement : NetworkBehaviour
     {
         base.OnNetworkSpawn();
 
-        // La copia del jugador cliente en el servidor necesita
-        // el CharacterController activo para detectar la DeathZone.
-        if (IsServer && !IsOwner && characterController != null)
+        // La copia del jugador cliente en el servidor debe conservar
+        // su collider activo para detectar la DeathZone.
+        if (IsServer && !IsOwner)
         {
-            characterController.enabled = true;
+            EnableServerCollision();
         }
 
+        // Posicionamiento inicial del dueño cuando aparece por primera vez.
         if (IsOwner)
         {
-            StartCoroutine(SelfTeleportSafelyRoutine());
+            StartCoroutine(InitialSpawnRoutine());
         }
     }
 
-    private IEnumerator SelfTeleportSafelyRoutine()
+    public void EnableServerCollision()
     {
-        // Espera a que la escena termine de inicializarse.
-        yield return null;
-
-        Vector3 destino = new Vector3(0f, 2f, 0f);
-        Quaternion rotacion = Quaternion.identity;
-
-        if (NetworkSpawnManager.Instance != null)
+        if (!IsServer || characterController == null)
         {
-            destino = NetworkSpawnManager.Instance.GetSpawnPosition(
-                OwnerClientId
-            );
-
-            rotacion = NetworkSpawnManager.Instance.GetSpawnRotation(
-                OwnerClientId
-            );
+            return;
         }
-        else
+
+        characterController.enabled = true;
+    }
+
+    private IEnumerator InitialSpawnRoutine()
+    {
+        // Espera brevemente a que el NetworkSpawnManager esté disponible.
+        int framesWaited = 0;
+
+        while (NetworkSpawnManager.Instance == null && framesWaited < 120)
+        {
+            framesWaited++;
+            yield return null;
+        }
+
+        if (NetworkSpawnManager.Instance == null)
         {
             Debug.LogError(
-                $"[SPAWN SEGURO] No se encontró NetworkSpawnManager para el jugador {OwnerClientId}. Se usará la posición de respaldo."
+                $"[SPAWN] No se encontró NetworkSpawnManager para el jugador {OwnerClientId}."
             );
+            yield break;
         }
 
-        ClientNetworkTransform clientTransform =
-            GetComponent<ClientNetworkTransform>();
+        Vector3 destino =
+            NetworkSpawnManager.Instance.GetSpawnPosition(OwnerClientId);
 
-        if (clientTransform != null)
-        {
-            clientTransform.enabled = false;
-        }
+        Quaternion rotacion =
+            NetworkSpawnManager.Instance.GetSpawnRotation(OwnerClientId);
 
-        if (characterController != null)
-        {
-            characterController.enabled = false;
-        }
-
-        transform.SetPositionAndRotation(destino, rotacion);
-        velocity = Vector3.zero;
-
-        yield return null;
-
-        if (characterController != null)
-        {
-            characterController.enabled = true;
-        }
-
-        if (clientTransform != null)
-        {
-            clientTransform.enabled = true;
-        }
+        yield return TeleportOwnerRoutine(destino, rotacion);
 
         Debug.Log(
-            $"[SPAWN SEGURO] Jugador {OwnerClientId} colocado en {destino}."
+            $"[SPAWN INICIAL] Jugador {OwnerClientId} colocado en {destino}."
         );
     }
 
     [ClientRpc]
-    public void TriggerSafeTeleportClientRpc(
+    public void RespawnOwnerAtClientRpc(
         Vector3 destino,
         Quaternion rotacion,
         ClientRpcParams clientRpcParams = default
     )
     {
-        if (!IsOwner) return;
+        if (!IsOwner)
+        {
+            return;
+        }
 
-        StartCoroutine(
-            EjecutarTeletransporteDesdeMuerte(destino, rotacion)
-        );
+        StartCoroutine(TeleportOwnerRoutine(destino, rotacion));
     }
 
-    private IEnumerator EjecutarTeletransporteDesdeMuerte(
+    private IEnumerator TeleportOwnerRoutine(
         Vector3 destino,
         Quaternion rotacion
     )
@@ -213,10 +199,21 @@ public class PlayerMovement : NetworkBehaviour
         {
             clientTransform.enabled = true;
         }
+    }
 
-        Debug.Log(
-            $"[RESPAWN] Jugador {OwnerClientId} recolocado en {destino}."
-        );
+    [ClientRpc]
+    public void TriggerSafeTeleportClientRpc(
+        Vector3 destino,
+        Quaternion rotacion,
+        ClientRpcParams clientRpcParams = default
+    )
+    {
+        if (!IsOwner)
+        {
+            return;
+        }
+
+        StartCoroutine(TeleportOwnerRoutine(destino, rotacion));
     }
 
     public override void OnNetworkDespawn()

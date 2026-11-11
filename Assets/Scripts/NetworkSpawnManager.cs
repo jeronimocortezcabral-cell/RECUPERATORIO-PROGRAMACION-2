@@ -1,4 +1,7 @@
+using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using Unity.Netcode;
 
 public class NetworkSpawnManager : NetworkBehaviour
@@ -9,6 +12,9 @@ public class NetworkSpawnManager : NetworkBehaviour
     [SerializeField] private Transform hostSpawnPoint;
     [SerializeField] private Transform clientSpawnPoint;
 
+    [Header("Escena de partida")]
+    [SerializeField] private string gameSceneName = "Juego";
+
     private void Awake()
     {
         if (Instance == null)
@@ -18,10 +24,113 @@ public class NetworkSpawnManager : NetworkBehaviour
         else if (Instance != this)
         {
             Debug.LogWarning(
-                "[NetworkSpawnManager] Hay más de una instancia. Se eliminará esta."
+                "[NetworkSpawnManager] Hay otra instancia. Se eliminará esta."
             );
 
             Destroy(gameObject);
+        }
+    }
+
+    public override void OnNetworkSpawn()
+    {
+        base.OnNetworkSpawn();
+
+        if (IsServer && NetworkManager.Singleton != null)
+        {
+            NetworkManager.Singleton.SceneManager.OnLoadEventCompleted +=
+                OnLoadEventCompleted;
+        }
+    }
+
+    public override void OnNetworkDespawn()
+    {
+        if (IsServer && NetworkManager.Singleton != null)
+        {
+            NetworkManager.Singleton.SceneManager.OnLoadEventCompleted -=
+                OnLoadEventCompleted;
+        }
+
+        base.OnNetworkDespawn();
+    }
+
+    private void OnLoadEventCompleted(
+        string sceneName,
+        LoadSceneMode loadSceneMode,
+        List<ulong> clientsCompleted,
+        List<ulong> clientsTimedOut
+    )
+    {
+        if (!IsServer || sceneName != gameSceneName)
+        {
+            return;
+        }
+
+        Debug.Log(
+            $"[NetworkSpawnManager] Terminó de cargar '{sceneName}'. Recolocando jugadores."
+        );
+
+        StartCoroutine(RespawnPlayersAfterSceneLoad());
+    }
+
+    private IEnumerator RespawnPlayersAfterSceneLoad()
+    {
+        // Espera un frame para que los objetos de escena terminen de inicializarse.
+        yield return null;
+
+        if (NetworkManager.Singleton == null)
+        {
+            Debug.LogError(
+                "[NetworkSpawnManager] No se encontró NetworkManager al recolocar jugadores."
+            );
+            yield break;
+        }
+
+        foreach (NetworkClient client in NetworkManager.Singleton.ConnectedClientsList)
+        {
+            NetworkObject playerObject = client.PlayerObject;
+
+            if (playerObject == null)
+            {
+                Debug.LogWarning(
+                    $"[NetworkSpawnManager] El cliente {client.ClientId} todavía no tiene PlayerObject."
+                );
+                continue;
+            }
+
+            PlayerMovement player =
+                playerObject.GetComponent<PlayerMovement>();
+
+            if (player == null)
+            {
+                Debug.LogError(
+                    $"[NetworkSpawnManager] El PlayerObject del cliente {client.ClientId} no tiene PlayerMovement."
+                );
+                continue;
+            }
+
+            Vector3 destino = GetSpawnPosition(client.ClientId);
+            Quaternion rotacion = GetSpawnRotation(client.ClientId);
+
+            // El collider de la copia del servidor debe estar activo
+            // para detectar la DeathZone.
+            player.EnableServerCollision();
+
+            // Solo el dueño del jugador ejecutará el teletransporte local.
+            player.RespawnOwnerAtClientRpc(
+                destino,
+                rotacion,
+                new ClientRpcParams
+                {
+                    Send = new ClientRpcSendParams
+                    {
+                        TargetClientIds = new[] { client.ClientId }
+                    }
+                }
+            );
+
+            Debug.Log(
+                $"[NetworkSpawnManager] Respawn solicitado para {client.ClientId} en {destino}."
+            );
         }
     }
 
@@ -38,8 +147,8 @@ public class NetworkSpawnManager : NetworkBehaviour
 
         Debug.LogError(
             clientId == 0
-                ? "[NetworkSpawnManager] Falta asignar Host Spawn Point en el Inspector."
-                : "[NetworkSpawnManager] Falta asignar Client Spawn Point en el Inspector."
+                ? "[NetworkSpawnManager] Falta asignar Host Spawn Point."
+                : "[NetworkSpawnManager] Falta asignar Client Spawn Point."
         );
 
         return new Vector3(0f, 2f, 0f);
