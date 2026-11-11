@@ -12,7 +12,7 @@ public class MainMenu : MonoBehaviour
     [SerializeField] private GameObject pantallaClientePanel;
 
     [Header("Configuración de Escenas")]
-    [SerializeField] private string nombreEscenaJuego = "Juego"; // Asegurate que coincida con tu escena en Build Settings
+    [SerializeField] private string nombreEscenaJuego = "Juego";
 
     void Start()
     {

@@ -4,7 +4,7 @@ using UnityEngine;
 public class ItemDespawn : NetworkBehaviour
 {
     [Header("Tiempo de Vida")]
-    [SerializeField] private float lifetime = 15f; // Ajustado a un tiempo razonable
+    [SerializeField] private float lifetime = 15f;
 
     public override void OnNetworkSpawn()
     {

@@ -25,7 +25,6 @@ public class PlayerMovement : NetworkBehaviour
     {
         characterController = GetComponent<CharacterController>();
 
-        // Se activa después de que el jugador se ubique en su spawn.
         if (characterController != null)
         {
             characterController.enabled = false;
@@ -43,7 +42,6 @@ public class PlayerMovement : NetworkBehaviour
 
     private void Update()
     {
-        // Solo el dueño lee controles y mueve a este jugador.
         if (!IsOwner) return;
 
         if (skipAction.action.WasPressedThisFrame())

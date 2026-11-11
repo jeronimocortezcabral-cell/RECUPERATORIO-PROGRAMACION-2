@@ -5,10 +5,8 @@ public class DeathZone : NetworkBehaviour
 {
     private void OnTriggerEnter(Collider other)
     {
-        // El servidor procesa la caída y solicita el respawn.
         if (!IsServer) return;
 
-        // Busca PlayerMovement también en los padres por si el collider está en un hijo.
         PlayerMovement player = other.GetComponentInParent<PlayerMovement>();
 
         if (player == null) return;

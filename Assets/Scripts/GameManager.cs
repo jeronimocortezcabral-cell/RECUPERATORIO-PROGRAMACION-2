@@ -90,19 +90,16 @@ public class GameManager : NetworkBehaviour
                     winnerMessage = "¡HUBO UN EMPATE!";
                 }
 
-                // El servidor guarda los resultados para su propia instancia.
                 WinnerText = winnerMessage;
                 HostFinalScore = hostScore.Value;
                 ClientFinalScore = clientScore.Value;
 
-                // Envía los resultados a las demás instancias.
                 UpdateGameOverClientRpc(
                     winnerMessage,
                     hostScore.Value,
                     clientScore.Value
                 );
 
-                // La carga de escena ocurre directamente en el servidor.
                 NetworkManager.Singleton.SceneManager.LoadScene(
                     "GameOver",
                     LoadSceneMode.Single
